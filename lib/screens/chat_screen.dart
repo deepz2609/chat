@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import 'media_preview_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String otherUid;
@@ -26,6 +27,15 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
+class PendingMessage {
+  final String id;
+  final String? text;
+  final String? localPath;
+  final String type;
+  final DateTime timestamp;
+  PendingMessage({required this.id, this.text, this.localPath, required this.type, required this.timestamp});
+}
+
 class _ChatScreenState extends State<ChatScreen> {
   final _msgCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
@@ -33,6 +43,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _emojiShowing = false;
   final _picker = ImagePicker();
   Timer? _typingTimer;
+  final List<PendingMessage> _pendingMessages = [];
 
   @override
   void initState() {
@@ -56,25 +67,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
     if (!mounted) return;
     
-    // Show Preview Dialog
-    final send = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A2E),
-        title: const Text('Send Image?', style: TextStyle(color: Colors.white)),
-        content: kIsWeb 
-          ? Image.network(image.path) 
-          : Image.file(File(image.path)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Send')),
-        ],
+    // Show WhatsApp-style Preview Screen
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MediaPreviewScreen(image: image),
       ),
     );
 
-    if (send != true) return;
+    if (result == null || result['send'] != true) return;
+    final String? caption = result['caption'];
 
-    setState(() => _sending = true);
+    final pendingId = DateTime.now().millisecondsSinceEpoch.toString();
+    final pendingMsg = PendingMessage(
+      id: pendingId,
+      text: caption,
+      localPath: image.path,
+      type: 'image',
+      timestamp: DateTime.now(),
+    );
+
+    setState(() {
+      _pendingMessages.insert(0, pendingMsg);
+    });
+
     try {
       String mediaUrl;
       if (kIsWeb) {
@@ -88,13 +104,18 @@ class _ChatScreenState extends State<ChatScreen> {
         chatRoomId: widget.chatRoomId,
         mediaUrl: mediaUrl,
         type: 'image',
+        caption: caption,
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
       }
     } finally {
-      if (mounted) setState(() => _sending = false);
+      if (mounted) {
+        setState(() {
+          _pendingMessages.removeWhere((m) => m.id == pendingId);
+        });
+      }
     }
   }
 
@@ -249,13 +270,26 @@ class _ChatScreenState extends State<ChatScreen> {
               return ListView.builder(
                 controller: _scrollCtrl, reverse: true,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                itemCount: docs.length,
+                itemCount: docs.length + _pendingMessages.length,
                 itemBuilder: (context, i) {
-                  final data = docs[i].data() as Map<String, dynamic>;
+                  if (i < _pendingMessages.length) {
+                    final pm = _pendingMessages[i];
+                    return _Bubble(
+                      text: pm.text ?? '',
+                      isMe: true,
+                      time: 'Sending...',
+                      cs: cs,
+                      localPath: pm.localPath,
+                      type: pm.type,
+                      isPending: true,
+                    );
+                  }
+
+                  final data = docs[i - _pendingMessages.length].data() as Map<String, dynamic>;
                   final isMe = data['senderId'] == myUid;
                   final ts = data['timestamp'] as Timestamp?;
                   final tsMs = ts?.millisecondsSinceEpoch;
-                  final showDate = _showDateHeaderFirestore(docs, i);
+                  final showDate = _showDateHeaderFirestore(docs, i - _pendingMessages.length);
                   
                   return Column(children: [
                     if (showDate && tsMs != null) Padding(
@@ -347,7 +381,9 @@ class _Bubble extends StatelessWidget {
   final String time;
   final ColorScheme cs;
   final String? mediaUrl;
+  final String? localPath;
   final String type;
+  final bool isPending;
   
   const _Bubble({
     required this.text,
@@ -355,7 +391,9 @@ class _Bubble extends StatelessWidget {
     required this.time,
     required this.cs,
     this.mediaUrl,
+    this.localPath,
     required this.type,
+    this.isPending = false,
   });
 
   @override
@@ -377,43 +415,71 @@ class _Bubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            if (mediaUrl != null) 
+            if (mediaUrl != null || localPath != null) 
               GestureDetector(
                 onTap: () {
-                  // Show full screen image
+                  if (mediaUrl == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => Scaffold(
+                        backgroundColor: Colors.black,
+                        appBar: AppBar(backgroundColor: Colors.black, iconTheme: const IconThemeData(color: Colors.white)),
+                        body: Center(child: InteractiveViewer(child: Image.network(mediaUrl!))),
+                      ),
+                    ),
+                  );
                 },
-                child: Hero(
-                  tag: mediaUrl!,
-                  child: Image.network(
-                    mediaUrl!,
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 200, width: 200,
-                        child: const Center(child: CircularProgressIndicator()),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            if (text.isNotEmpty && mediaUrl == null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Column(
-                  crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                child: Stack(
                   children: [
-                    Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.grey[200], fontSize: 15, height: 1.35)),
-                    const SizedBox(height: 4),
-                    Text(time, style: TextStyle(color: isMe ? Colors.white.withValues(alpha: 0.6) : Colors.grey[600], fontSize: 11)),
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                      child: localPath != null 
+                        ? (kIsWeb ? Image.network(localPath!) : Image.file(File(localPath!), fit: BoxFit.cover, height: 200, width: double.infinity))
+                        : Image.network(
+                            mediaUrl!,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                height: 200, width: double.infinity,
+                                color: Colors.black26,
+                                child: const Center(child: CircularProgressIndicator()),
+                              );
+                            },
+                          ),
+                    ),
+                    if (isPending)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black26,
+                          child: const Center(child: CircularProgressIndicator(color: Colors.white70)),
+                        ),
+                      ),
                   ],
                 ),
               ),
-            if (mediaUrl != null)
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Text(time, style: TextStyle(color: isMe ? Colors.white.withValues(alpha: 0.6) : Colors.grey[600], fontSize: 11)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                children: [
+                  if (text.isNotEmpty)
+                    Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.grey[200], fontSize: 15, height: 1.35)),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(time, style: TextStyle(color: isMe ? Colors.white.withValues(alpha: 0.6) : Colors.grey[600], fontSize: 11)),
+                      if (isPending) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.access_time_rounded, size: 12, color: Colors.white60),
+                      ],
+                    ],
+                  ),
+                ],
               ),
+            ),
           ],
         ),
       ),

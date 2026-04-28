@@ -140,6 +140,7 @@ class ChatService {
     required String chatRoomId,
     required String mediaUrl,
     required String type, // 'image' or 'video'
+    String? caption,
   }) async {
     final user = _auth.currentUser!;
 
@@ -150,7 +151,7 @@ class ChatService {
         .add({
       'senderId': user.uid,
       'senderName': user.displayName ?? user.phoneNumber ?? 'Unknown',
-      'text': type == 'image' ? '📷 Image' : '🎥 Video',
+      'text': caption ?? (type == 'image' ? '📷 Image' : '🎥 Video'),
       'mediaUrl': mediaUrl,
       'timestamp': FieldValue.serverTimestamp(),
       'type': type,
@@ -158,7 +159,7 @@ class ChatService {
     });
 
     await _db.collection('chatRooms').doc(chatRoomId).update({
-      'lastMessage': type == 'image' ? '📷 Image' : '🎥 Video',
+      'lastMessage': caption ?? (type == 'image' ? '📷 Image' : '🎥 Video'),
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastMessageSenderId': user.uid,
     });
