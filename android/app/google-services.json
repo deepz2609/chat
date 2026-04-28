@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "694472972526",
+    "project_id": "quickchat-flutter-app",
+    "storage_bucket": "quickchat-flutter-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:694472972526:android:d4a3118fbd93fe616ebbff",
+        "android_client_info": {
+          "package_name": "com.quickchat.quickchat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDN9-RJSk32Dg0-uJckpDG81c_PDiNbVk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
