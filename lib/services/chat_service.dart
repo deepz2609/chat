@@ -48,6 +48,7 @@ class ChatService {
   static Future<void> sendMessage({
     required String chatRoomId,
     required String message,
+    Map<String, dynamic>? replyTo,
   }) async {
     final user = _auth.currentUser!;
 
@@ -63,6 +64,7 @@ class ChatService {
       'timestamp': FieldValue.serverTimestamp(),
       'type': 'text',
       'isRead': false,
+      if (replyTo != null) 'replyTo': replyTo,
     });
 
     // Update chat room with last message info
@@ -141,6 +143,7 @@ class ChatService {
     required String mediaUrl,
     required String type, // 'image' or 'video'
     String? caption,
+    Map<String, dynamic>? replyTo,
   }) async {
     final user = _auth.currentUser!;
 
@@ -156,6 +159,7 @@ class ChatService {
       'timestamp': FieldValue.serverTimestamp(),
       'type': type,
       'isRead': false,
+      if (replyTo != null) 'replyTo': replyTo,
     });
 
     await _db.collection('chatRooms').doc(chatRoomId).update({

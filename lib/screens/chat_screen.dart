@@ -10,6 +10,8 @@ import 'package:flutter/services.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import 'media_preview_screen.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ChatScreen extends StatefulWidget {
   final String otherUid;
@@ -44,6 +46,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _picker = ImagePicker();
   Timer? _typingTimer;
   final List<PendingMessage> _pendingMessages = [];
+  Map<String, dynamic>? _replyMessage;
 
   @override
   void initState() {
@@ -105,7 +108,9 @@ class _ChatScreenState extends State<ChatScreen> {
         mediaUrl: mediaUrl,
         type: 'image',
         caption: caption,
+        replyTo: _replyMessage,
       );
+      setState(() => _replyMessage = null);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
@@ -134,7 +139,8 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() => _sending = true);
     _msgCtrl.clear();
     try {
-      await ChatService.sendMessage(chatRoomId: widget.chatRoomId, message: text);
+      await ChatService.sendMessage(chatRoomId: widget.chatRoomId, message: text, replyTo: _replyMessage);
+      setState(() => _replyMessage = null);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
@@ -291,26 +297,42 @@ class _ChatScreenState extends State<ChatScreen> {
                   final tsMs = ts?.millisecondsSinceEpoch;
                   final showDate = _showDateHeaderFirestore(docs, i - _pendingMessages.length);
                   
-                  return Column(children: [
-                    if (showDate && tsMs != null) Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(12)),
-                        child: Text(_fmtDate(tsMs), style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
+                    return Column(children: [
+                      if (showDate && tsMs != null) Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(12)),
+                          child: Text(_fmtDate(tsMs), style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500)),
+                        ),
                       ),
-                    ),
-                    _Bubble(
-                      text: data['text'] ?? '',
-                      isMe: isMe,
-                      time: _fmtTime(tsMs),
-                      cs: cs,
-                      mediaUrl: data['mediaUrl'],
-                      type: data['type'] ?? 'text',
-                    ),
-                  ]);
-                },
-              );
+                      GestureDetector(
+                        onLongPress: () {
+                          setState(() {
+                            _replyMessage = {
+                              'id': docs[i - _pendingMessages.length].id,
+                              'text': data['text'],
+                              'senderId': data['senderId'],
+                              'senderName': data['senderName'],
+                              'type': data['type'],
+                            };
+                          });
+                          HapticFeedback.lightImpact();
+                        },
+                        child: _Bubble(
+                          text: data['text'] ?? '',
+                          isMe: isMe,
+                          time: _fmtTime(tsMs),
+                          cs: cs,
+                          mediaUrl: data['mediaUrl'],
+                          type: data['type'] ?? 'text',
+                          isRead: data['isRead'] ?? false,
+                          replyTo: data['replyTo'],
+                        ),
+                      ),
+                    ]);
+                  },
+                );
             },
           ),
         ),
@@ -334,43 +356,84 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildInput(ColorScheme cs) {
-    return Container(
-      padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: MediaQuery.of(context).padding.bottom + 8),
-      decoration: const BoxDecoration(color: Color(0xFF0D0D14), border: Border(top: BorderSide(color: Color(0xFF1A1A2E)))),
-      child: Row(children: [
-        IconButton(
-          icon: Icon(_emojiShowing ? Icons.keyboard_rounded : Icons.emoji_emotions_rounded, color: Colors.grey[500]),
-          onPressed: () {
-            setState(() => _emojiShowing = !_emojiShowing);
-            if (!_emojiShowing) {
-              FocusScope.of(context).requestFocus(FocusNode());
-            }
-          },
-        ),
-        IconButton(
-          icon: Icon(Icons.add_photo_alternate_rounded, color: Colors.grey[500]),
-          onPressed: _pickImage,
-        ),
-        Expanded(child: Container(
-          decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(24)),
-          child: TextField(
-            controller: _msgCtrl, textCapitalization: TextCapitalization.sentences,
-            maxLines: 4, minLines: 1, 
-            onChanged: (val) => _onTyping(),
-            onTap: () {
-              if (_emojiShowing) setState(() => _emojiShowing = false);
-            },
-            onSubmitted: (_) => _send(),
-            decoration: const InputDecoration(hintText: 'Type a message...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_replyMessage != null)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E),
+              borderRadius: BorderRadius.circular(12),
+              border: Border(left: BorderSide(color: cs.primary, width: 4)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _replyMessage!['senderId'] == AuthService.currentUser?.uid ? 'You' : _replyMessage!['senderName'],
+                        style: TextStyle(color: cs.primary, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _replyMessage!['text'],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20, color: Colors.white54),
+                  onPressed: () => setState(() => _replyMessage = null),
+                ),
+              ],
+            ),
           ),
-        )),
-        const SizedBox(width: 8),
         Container(
-          width: 48, height: 48,
-          decoration: BoxDecoration(gradient: LinearGradient(colors: [cs.primary, cs.primary.withOpacity(0.8)]), borderRadius: BorderRadius.circular(16)),
-          child: IconButton(icon: _sending ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.send_rounded, color: Colors.white, size: 22), onPressed: _send),
+          padding: EdgeInsets.only(left: 8, right: 8, top: 8, bottom: MediaQuery.of(context).padding.bottom + 8),
+          decoration: const BoxDecoration(color: Color(0xFF0D0D14), border: Border(top: BorderSide(color: Color(0xFF1A1A2E)))),
+          child: Row(children: [
+            IconButton(
+              icon: Icon(_emojiShowing ? Icons.keyboard_rounded : Icons.emoji_emotions_rounded, color: Colors.grey[500]),
+              onPressed: () {
+                setState(() => _emojiShowing = !_emojiShowing);
+                if (!_emojiShowing) {
+                  FocusScope.of(context).requestFocus(FocusNode());
+                }
+              },
+            ),
+            IconButton(
+              icon: Icon(Icons.add_photo_alternate_rounded, color: Colors.grey[500]),
+              onPressed: _pickImage,
+            ),
+            Expanded(child: Container(
+              decoration: BoxDecoration(color: const Color(0xFF1A1A2E), borderRadius: BorderRadius.circular(24)),
+              child: TextField(
+                controller: _msgCtrl, textCapitalization: TextCapitalization.sentences,
+                maxLines: 4, minLines: 1, 
+                onChanged: (val) => _onTyping(),
+                onTap: () {
+                  if (_emojiShowing) setState(() => _emojiShowing = false);
+                },
+                onSubmitted: (_) => _send(),
+                decoration: const InputDecoration(hintText: 'Type a message...', border: InputBorder.none, contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12)),
+              ),
+            )),
+            const SizedBox(width: 8),
+            Container(
+              width: 48, height: 48,
+              decoration: BoxDecoration(gradient: LinearGradient(colors: [cs.primary, cs.primary.withOpacity(0.8)]), borderRadius: BorderRadius.circular(16)),
+              child: IconButton(icon: _sending ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.send_rounded, color: Colors.white, size: 22), onPressed: _send),
+            ),
+          ]),
         ),
-      ]),
+      ],
     );
   }
 }
@@ -384,6 +447,8 @@ class _Bubble extends StatelessWidget {
   final String? localPath;
   final String type;
   final bool isPending;
+  final bool isRead;
+  final Map<String, dynamic>? replyTo;
   
   const _Bubble({
     required this.text,
@@ -394,6 +459,8 @@ class _Bubble extends StatelessWidget {
     this.localPath,
     required this.type,
     this.isPending = false,
+    this.isRead = false,
+    this.replyTo,
   });
 
   @override
@@ -415,6 +482,32 @@ class _Bubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
+            if (replyTo != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border(left: BorderSide(color: isMe ? Colors.white70 : cs.primary, width: 3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      replyTo!['senderId'] == AuthService.currentUser?.uid ? 'You' : replyTo!['senderName'],
+                      style: TextStyle(color: isMe ? Colors.white70 : cs.primary, fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      replyTo!['text'],
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: isMe ? Colors.white60 : Colors.grey[400], fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
             if (mediaUrl != null || localPath != null) 
               GestureDetector(
                 onTap: () {
@@ -465,12 +558,34 @@ class _Bubble extends StatelessWidget {
                 crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
                   if (text.isNotEmpty)
-                    Text(text, style: TextStyle(color: isMe ? Colors.white : Colors.grey[200], fontSize: 15, height: 1.35)),
+                    Linkify(
+                      onOpen: (link) async {
+                        final url = Uri.parse(link.url);
+                        if (await canLaunchUrl(url)) {
+                          await launchUrl(url, mode: LaunchMode.externalApplication);
+                        }
+                      },
+                      text: text,
+                      style: TextStyle(color: isMe ? Colors.white : Colors.grey[200], fontSize: 15, height: 1.35),
+                      linkStyle: TextStyle(
+                        color: isMe ? Colors.white : cs.primary,
+                        decoration: TextDecoration.underline,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(time, style: TextStyle(color: isMe ? Colors.white.withOpacity(0.6) : Colors.grey[600], fontSize: 11)),
+                      if (isMe) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          isRead ? Icons.done_all_rounded : Icons.done_rounded,
+                          size: 15,
+                          color: isRead ? const Color(0xFF40C4FF) : Colors.white60,
+                        ),
+                      ],
                       if (isPending) ...[
                         const SizedBox(width: 4),
                         const Icon(Icons.access_time_rounded, size: 12, color: Colors.white60),
