@@ -130,13 +130,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: colorScheme.primary.withValues(alpha: 0.1),
+                      color: colorScheme.primary.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Icon(
                       Icons.chat_bubble_outline_rounded,
                       size: 48,
-                      color: colorScheme.primary.withValues(alpha: 0.5),
+                      color: colorScheme.primary.withOpacity(0.5),
                     ),
                   ),
                   const SizedBox(height: 24),

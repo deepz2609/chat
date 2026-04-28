@@ -38,7 +38,7 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
           ),
           Container(
             padding: const EdgeInsets.all(16),
-            color: Colors.black.withValues(alpha: 0.8),
+            color: Colors.black.withOpacity(0.8),
             child: Row(
               children: [
                 Expanded(
@@ -47,7 +47,7 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: 'Add a caption...',
-                      hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                       border: InputBorder.none,
                     ),
                   ),

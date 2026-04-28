@@ -259,7 +259,7 @@ class _ChatScreenState extends State<ChatScreen> {
               }
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                 return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.waving_hand_rounded, size: 48, color: cs.primary.withValues(alpha: 0.4)),
+                  Icon(Icons.waving_hand_rounded, size: 48, color: cs.primary.withOpacity(0.4)),
                   const SizedBox(height: 16),
                   Text('Say hello! 👋', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
                 ]));
@@ -367,7 +367,7 @@ class _ChatScreenState extends State<ChatScreen> {
         const SizedBox(width: 8),
         Container(
           width: 48, height: 48,
-          decoration: BoxDecoration(gradient: LinearGradient(colors: [cs.primary, cs.primary.withValues(alpha: 0.8)]), borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(gradient: LinearGradient(colors: [cs.primary, cs.primary.withOpacity(0.8)]), borderRadius: BorderRadius.circular(16)),
           child: IconButton(icon: _sending ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.send_rounded, color: Colors.white, size: 22), onPressed: _send),
         ),
       ]),
@@ -470,7 +470,7 @@ class _Bubble extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(time, style: TextStyle(color: isMe ? Colors.white.withValues(alpha: 0.6) : Colors.grey[600], fontSize: 11)),
+                      Text(time, style: TextStyle(color: isMe ? Colors.white.withOpacity(0.6) : Colors.grey[600], fontSize: 11)),
                       if (isPending) ...[
                         const SizedBox(width: 4),
                         const Icon(Icons.access_time_rounded, size: 12, color: Colors.white60),

@@ -83,7 +83,7 @@ class QuickChatApp extends StatelessWidget {
           ),
         ),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: const Color(0xFF1A1A2E),
         elevation: 0,
         shape: RoundedRectangleBorder(
