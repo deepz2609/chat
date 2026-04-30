@@ -47,6 +47,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _typingTimer;
   final List<PendingMessage> _pendingMessages = [];
   Map<String, dynamic>? _replyMessage;
+  double _messageFontSize = 15.0;
 
   @override
   void initState() {
@@ -228,7 +229,34 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           PopupMenuButton<String>(
             onSelected: (val) {
-              if (val == 'clear') {
+              if (val == 'text_size') {
+                showDialog(
+                  context: context,
+                  builder: (context) => StatefulBuilder(
+                    builder: (context, setDialogState) => AlertDialog(
+                      backgroundColor: const Color(0xFF1A1A2E),
+                      title: const Text('Adjust Text Size', style: TextStyle(color: Colors.white)),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Message Size: ${_messageFontSize.toInt()}', style: TextStyle(color: Colors.white)),
+                          Slider(
+                            value: _messageFontSize,
+                            min: 10, max: 30, divisions: 20,
+                            onChanged: (v) {
+                              setDialogState(() => _messageFontSize = v);
+                              setState(() => _messageFontSize = v);
+                            },
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done')),
+                      ],
+                    ),
+                  ),
+                );
+              } else if (val == 'clear') {
                 showDialog(
                   context: context,
                   builder: (context) => AlertDialog(
@@ -250,6 +278,7 @@ class _ChatScreenState extends State<ChatScreen> {
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(value: 'text_size', child: Text('Text Size')),
               const PopupMenuItem(value: 'clear', child: Text('Clear Chat')),
             ],
           ),
@@ -288,6 +317,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       localPath: pm.localPath,
                       type: pm.type,
                       isPending: true,
+                      fontSize: _messageFontSize,
                     );
                   }
 
@@ -328,6 +358,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           type: data['type'] ?? 'text',
                           isRead: data['isRead'] ?? false,
                           replyTo: data['replyTo'],
+                          fontSize: _messageFontSize,
                         ),
                       ),
                     ]);
@@ -449,6 +480,7 @@ class _Bubble extends StatelessWidget {
   final bool isPending;
   final bool isRead;
   final Map<String, dynamic>? replyTo;
+  final double fontSize;
   
   const _Bubble({
     required this.text,
@@ -461,6 +493,7 @@ class _Bubble extends StatelessWidget {
     this.isPending = false,
     this.isRead = false,
     this.replyTo,
+    required this.fontSize,
   });
 
   @override
@@ -470,7 +503,7 @@ class _Bubble extends StatelessWidget {
       child: Container(
         constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
         margin: const EdgeInsets.symmetric(vertical: 3),
-        padding: mediaUrl != null ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: (mediaUrl != null || localPath != null) ? EdgeInsets.zero : const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: isMe ? cs.primary : const Color(0xFF1A1A2E),
@@ -553,7 +586,7 @@ class _Bubble extends StatelessWidget {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Column(
                 crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
@@ -566,7 +599,7 @@ class _Bubble extends StatelessWidget {
                         }
                       },
                       text: text,
-                      style: TextStyle(color: isMe ? Colors.white : Colors.grey[200], fontSize: 15, height: 1.35),
+                      style: TextStyle(color: isMe ? Colors.white : Colors.grey[200], fontSize: fontSize, height: 1.35),
                       linkStyle: TextStyle(
                         color: isMe ? Colors.white : cs.primary,
                         decoration: TextDecoration.underline,
